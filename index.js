@@ -21,13 +21,19 @@ app.get('/:size(\\d+)?/:url(*)', async (req, res) => {
         if (cache.has(cacheKey))
             return res.type('png').send(cache.get(cacheKey));
 
-        let iconUrl = `${url}/favicon.ico`;
+        let iconUrl = `${url}favicon.ico`;
         try {
             const response = await axios.get(url);
-            const match = /<link[^>]+rel=["'](?:shortcut icon|icon)["'][^>]+href=["']([^"']+)["']/i.exec(response.data);
-            iconUrl = match ? new URL(match[1], url).href : iconUrl;
+            const match = /<link\s+[^>]*href=["']([^"']+)["'][^>]*rel=["'](?:shortcut icon|icon)["']|<link\s+[^>]*rel=["'](?:shortcut icon|icon)["'][^>]*href=["']([^"']+)["']/i.exec(response.data);
+            iconUrl = match ? (match[1] || match[2]) : iconUrl;
+            if (iconUrl && !iconUrl.startsWith('http://') && !iconUrl.startsWith('https://')) {
+                const urlParts = url.split('/');
+                const domain = urlParts[0] + '//' + urlParts[2];
+                iconUrl = domain + (iconUrl.startsWith('/') ? '' : '/') + iconUrl;
+            }
+            console.info('Found a linked icon URL:', iconUrl);
         } catch { 
-            console.log('Error fetching icon from', url);
+            console.error('Error fetching icon from', url);
         }
 
         const iconResponse = await axios.get(iconUrl, { responseType: 'arraybuffer' });
@@ -49,7 +55,7 @@ app.get('/:size(\\d+)?/:url(*)', async (req, res) => {
         cache.set(cacheKey, resizedIcon);
         return res.type('png').send(resizedIcon);
     } catch (ex) {
-        console.log('Error generating icon');
+        console.log('Error generating icon', ex);
         res.status(500).send('Error generating icon');
     }
 });
